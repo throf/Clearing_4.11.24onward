@@ -36,7 +36,7 @@ def detect_and_mark_circles(frame, frame_counter):
 
         if frame_counter < 5:
             for i, circle in enumerate(circles[0, :1]):
-                center = (circle[0], circle[1])
+                center = (int(circle[0]), int(circle[1]))
                 radius = circle[2]
 
                 center_average = (
@@ -266,15 +266,20 @@ def process_image_with_annotation(frame, frame_counter, target_pixels):
             for coord in filled_area_coords:
                 y, x = coord
                 cv2.circle(combined_mask, (x, y), int(radius), (255, 255, 255), -1)
+        # use and AND operation to get the area where combined_mask and tube_mask meet
+        tube_mask_3ch = np.stack((tube_mask,) * 3, axis=-1)
+        and_Combined_plus_Tube_mask = cv2.bitwise_and(combined_mask, tube_mask_3ch)
         # Find contours in the combined mask
-        contours, _ = cv2.findContours(combined_mask[:, :, 0], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(and_Combined_plus_Tube_mask[:, :, 0], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if contours:
             # Combine all contours to create a single contour
             combined_contour = np.concatenate(contours)
             # Calculate the area of the region that would have been colored black
             black_area_pixels = cv2.contourArea(combined_contour)
+            # only use the AND combination of combined_mask and tube_mask
+            cv2.imwrite(r"/Users/manuelkalozi/PycharmProjects/Clearing_4.11.24onward/generated data/test_noclue/combimask.jpg", and_Combined_plus_Tube_mask)
             # Calculate the average RGB values of the area that would have been colored black
-            average_rgb = np.mean(frame[combined_mask[:, :, 0] == 255], axis=0)
+            average_rgb = np.mean(frame[and_Combined_plus_Tube_mask[:, :, 0] == 255], axis=0)
             # Separate the average RGB values
             average_b, average_g, average_r = average_rgb
             cv2.drawContours(frame, [combined_contour], 0, (128, 0, 128), 2)
@@ -315,8 +320,9 @@ def adjust_radius(frame, yellow_areas, initial_radius, target_pixels):
     print("run ar")
     best_radius = initial_radius
     closest_pixel_count = float('inf')
-    for factor in range(0, int(round(float(target_pixels)))):
-        radius_candidate = initial_radius + factor
+    checker = 0
+    for factor in range(0, int(round(np.sqrt(float(target_pixels) / np.pi)))):
+        radius_candidate = initial_radius + factor * 10
         print(f"{radius_candidate}")
         # Create an empty mask to store circles
         combined_mask = np.zeros_like(frame, dtype=np.uint8)
@@ -335,8 +341,14 @@ def adjust_radius(frame, yellow_areas, initial_radius, target_pixels):
             for coord in filled_area_coords:
                 y, x = coord
                 cv2.circle(combined_mask, (x, y), int(radius_candidate), (255, 255, 255), -1)
+        # get tube_mask involved
+        tube_mask = calculate_tube_mask(frame)
+        tube_mask_3ch = np.stack((tube_mask,) * 3, axis=-1)
+        print("combined_mask shape:", combined_mask.shape, "type:", combined_mask.dtype)
+        print("tube_mask shape:", tube_mask.shape, "type:", tube_mask.dtype)
+        and_Combined_plus_Tube_mask = cv2.bitwise_and(combined_mask, tube_mask_3ch)
         # Find contours in the combined mask
-        contours, _ = cv2.findContours(combined_mask[:, :, 0], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(and_Combined_plus_Tube_mask[:, :, 0], cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         if contours:
             # Combine all contours to create a single contour
             combined_contour = np.concatenate(contours)
@@ -348,9 +360,19 @@ def adjust_radius(frame, yellow_areas, initial_radius, target_pixels):
                 best_radius = 1
                 return best_radius
 
+            if black_area_pixels >= (radius_average ** 2 * np.pi):
+                print(f"max tube area: {radius_average ** 2 * np.pi}")
+                best_radius = radius_candidate
+                return best_radius
+
+            if checker == 1 and old_distance == abs(black_area_pixels - target_pixels):
+                best_radius = radius_candidate
+                return best_radius
+
             if target_pixels >= black_area_pixels:
                 old_candidate = radius_candidate
                 old_distance = abs(black_area_pixels - target_pixels)
+                checker = 1
             else:
                 # Check if the current radius is closer to the target pixel count
                 current_distance = abs(black_area_pixels - target_pixels)
@@ -476,11 +498,11 @@ def capture_frames():
                         frame = detect_and_mark_circles(adjusted_frame, frame_counter)
                         curr_timestamp = int(video.get(cv2.CAP_PROP_POS_MSEC))
                         tube_mask = calculate_tube_mask(frame)
-                        cv2.imwrite(r"/Users/manuelkalozi/Desktop/test_noclue/2.jpg", tube_mask)
+                        cv2.imwrite(r"/Users/manuelkalozi/PycharmProjects/Clearing_4.11.24onward/generated data/test_noclue/2.jpg", tube_mask)
                         print("written 2")
                         yellow_areas_pixel_singleframe = calculate_average_yellow_area_pixel_count(frame, tube_mask)
                         print(f"Yellow areas pixel count for frame {frame_counter + 1}: {yellow_areas_pixel_singleframe}")
-                        cv2.imwrite(r"/Users/manuelkalozi/Desktop/test_noclue/1.jpg", frame)
+                        cv2.imwrite(r"/Users/manuelkalozi/PycharmProjects/Clearing_4.11.24onward/generated data/test_noclue/1.jpg", frame)
                         yellow_areas_pixel_sum += yellow_areas_pixel_singleframe
                         frame_counter += 1
 
@@ -497,7 +519,7 @@ def capture_frames():
                     print(f"target pixels: {target_pixels}")
                     frame, average_bgr_value_tube = process_image_with_annotation(frame, frame_counter, target_pixels)
                     image_path = f"{output_folder}/frame_{frame_counter}.jpg"
-                    #cv2.imwrite(image_path, frame)
+                    cv2.imwrite(image_path, frame)
                     cv2.imshow("Processed Frame", frame)
                     print(f"Saved frame at {frame_counter} ms to {image_path}")
                     frame_counter += 1
