@@ -48,7 +48,7 @@ def detect_and_mark_circles(frame, frame_counter):
 
         else:
             center = center_average
-            radius = radius_average - 3
+            radius = radius_average - 6
 
             if frame_counter == 5:
                 print(f"circle fully calculated: Radius: {radius}, Center: {center}")
@@ -233,7 +233,7 @@ def process_image_with_annotation(frame, frame_counter, target_pixels):
         average_bgr_value_tube = calculate_average_color_value(frame, tube_mask)
         print("Average BGR value in the tube area:", average_bgr_value_tube)
         # Update LOWER_GREEN2 based on the average_bgr_value_tube
-        LOWER_GREEN2 = np.array([int(0.80 * value) for value in average_bgr_value_tube], dtype=np.uint8)
+        LOWER_GREEN2 = np.array([int(0.75 * value) for value in average_bgr_value_tube], dtype=np.uint8)
         # Update LOWER_GREEN2 based on the average_bgr_value_tube
         LOWER_YELLOW2 = np.array([int(0.91 * value) for value in average_bgr_value_tube], dtype=np.uint8)
 
@@ -322,7 +322,7 @@ def adjust_radius(frame, yellow_areas, initial_radius, target_pixels):
     closest_pixel_count = float('inf')
     checker = 0
     for factor in range(0, int(round(np.sqrt(float(target_pixels) / np.pi)))):
-        radius_candidate = initial_radius + factor * 10
+        radius_candidate = initial_radius + factor * 1 # *1 raise for higher speed
         print(f"{radius_candidate}")
         # Create an empty mask to store circles
         combined_mask = np.zeros_like(frame, dtype=np.uint8)
@@ -399,7 +399,7 @@ def distance_to_green(contour, green_contour):
 frame_width, frame_height = 640, 480
 
 # Define the rectangle coordinates and dimensions (1/1) is at the top left corner, y down, x right
-rect_x = 1523
+rect_x = 1423
 rect_y = 501
 rect_width = 30
 rect_height = 60
@@ -485,7 +485,9 @@ def capture_frames():
                 # Process the first 5 frames to determine circles
                 if frame_counter < 5:
                     ret, frame = video.read()
+                    adjusted_frame = adjust_brightness(frame, target_brightness)
                     frame = detect_and_mark_circles(adjusted_frame, frame_counter)
+                    time.sleep(1)
                     frame_counter += 1
 
                 # After processing first 5 frames, determine target pixels if necessary
@@ -493,6 +495,7 @@ def capture_frames():
                     yellow_areas_pixel_sum = 0
                     while 5 <= frame_counter < 10:  # Start after the 5 frames needed for setting up detect_and_mark_circles
                         ret, frame = video.read()
+                        adjusted_frame = adjust_brightness(frame, target_brightness)
                         if not ret:
                             break
                         frame = detect_and_mark_circles(adjusted_frame, frame_counter)
@@ -504,6 +507,7 @@ def capture_frames():
                         print(f"Yellow areas pixel count for frame {frame_counter + 1}: {yellow_areas_pixel_singleframe}")
                         cv2.imwrite(r"/Users/manuelkalozi/PycharmProjects/Clearing_4.11.24onward/generated data/test_noclue/1.jpg", frame)
                         yellow_areas_pixel_sum += yellow_areas_pixel_singleframe
+                        time.sleep(1)
                         frame_counter += 1
 
                     # Calculate the average pixel count from the selected frames
@@ -515,13 +519,15 @@ def capture_frames():
                 else:
                     # Process the frame with annotations and capture the result
                     ret, frame = video.read()
+                    adjusted_frame = adjust_brightness(frame, target_brightness)
                     frame = detect_and_mark_circles(adjusted_frame, frame_counter)
                     print(f"target pixels: {target_pixels}")
                     frame, average_bgr_value_tube = process_image_with_annotation(frame, frame_counter, target_pixels)
                     image_path = f"{output_folder}/frame_{frame_counter}.jpg"
-                    cv2.imwrite(image_path, frame)
+                    #cv2.imwrite(image_path, frame)
                     cv2.imshow("Processed Frame", frame)
                     print(f"Saved frame at {frame_counter} ms to {image_path}")
+                    time.sleep(1)
                     frame_counter += 1
 
                 # Reset the timer after processing a frame
